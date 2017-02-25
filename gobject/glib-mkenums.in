@@ -14,10 +14,10 @@ option_lowercase_name = ''  # DEPRECATED.  A lower case name to use as part
                             # uses abnormal capitalization and we can not
                             # guess where to put the underscores.
 seenbitshift = 0        # Have we seen bitshift operators?
-enum_prefix = None        # Prefix for this enumeration
-enumname = None            # Name for this enumeration
-enumshort = None           # $enumname without prefix
-enumname_prefix = None       # prefix of $enumname
+enum_prefix = ''        # Prefix for this enumeration
+enumname = ''            # Name for this enumeration
+enumshort = ''           # $enumname without prefix
+enumname_prefix = ''       # prefix of $enumname
 enumindex = 0        # Global enum counter
 firstenum = 1        # Is this the first enumeration per file?
 entries = []            # [ name, val ] for each entry
@@ -43,17 +43,18 @@ def parse_trigraph(opts):
     return result
 
 def parse_entries(file, file_name):
-    looking_for_name = 0
+    global entries
+    looking_for_name = False
 
     for line in file:
         # read lines until we have no open comments
-        while re.search('/\*([^*]|\*(?!/))*$', line):
+        while re.search(r'/\*([^*]|\*(?!/))*$', line):
             line = file.readline()
 
         # strip comments w/o options
         line = re.sub(r'''/\*(?!<)
             ([^*]+|\*(?!/))*
-           \*/''', '');
+           \*/''', '', line, flags=re.X)
 
         line = line.rstrip()
 
@@ -64,53 +65,52 @@ def parse_entries(file, file_name):
         if looking_for_name:
             m = re.match('\s*(\w+)')
             if m:
-                enumname = m[1];
-                return 1;
+                enumname = m.group(1);
+                return True
 
         # Handle include files
-        m = re.match('\#include\s*<([^>]*)>')
+        m = re.match(r'\#include\s*<([^>]*)>', line)
         if m:
-            newfilename = os.path.join("..", m[1])
+            newfilename = os.path.join("..", m.group(1))
             newfile = open(newfilename)
 
-            if parse_entries (newfile, newfilename):
-                return 1;
+            if not parse_entries(newfile, newfilename):
+                return False
             else:
                 continue
 
-        m = re.match('\s*\}\s*(\w+)')
+        m = re.match(r'\s*\}\s*(\w+)', line)
         if m:
-            enumname = m[1];
+            enumname = m.group(1)
             enumindex+=1;
             return 1;
 
-        m = re.match('\s*\}')
+        m = re.match(r'\s*\}', line)
         if m:
             enumindex+=1;
-            looking_for_name = 1;
+            looking_for_name = True
             continue
 
-        m = re.match('''s*
+        m = re.match(r'''s*
               (\w+)\s*                   # name
               (?:=(                      # value
-           \s*\w+\s*\(.*\)\s*       # macro with multiple args
-           |                        # OR
+                   \s*\w+\s*\(.*\)\s*       # macro with multiple args
+                   |                        # OR
                    (?:[^,/]|/(?!\*))*       # anything but a comma or comment
                   ))?,?\s*
               (?:/\*<                    # options
                 (([^*]|\*(?!/))*)
                >\s*\*/)?,?
-              \s*$
-             ''', line)
+              \s*$''', line, flags=re.X)
         if m:
             groups = m.groups()
-            name = groups(1)
+            name = groups[0]
             value = None
             options = None
             if len(groups) > 1:
-                value = groups(2)
+                value = groups[1]
             if len(groups) > 2:
-                options = groups(3)
+                options = groups[2]
 
             if flags is not None and value is not None and '<<' in value:
                 seenbitshift = 1
@@ -124,8 +124,8 @@ def parse_entries(file, file_name):
         elif re.match('s*\#', line):
             pass
         else:
-            print("$0: $file_name:$.: Failed to parse `$_'")
-        return 0
+            sys.exit("Failed to parse %s." % file_name)
+    return False
 
 def version():
     print(r"glib-mkenums version glib-@GLIB_VERSION@")
@@ -185,6 +185,7 @@ vtail = ""   # value tail, produced after iterating over enum values
 comment_tmpl = ""   # comment template
 
 def read_template_file(file):
+    global idprefix, symprefix, fhead, fprod, ftail, eprod, vhead, vprod, vtail, comment_tmpl
     tmpl = {'file-header': fhead,
             'file-production': fprod,
             'file-tail': ftail,
@@ -200,14 +201,14 @@ def read_template_file(file):
     for line in ifile:
         m = re.match('\/\*\*\*\s+(BEGIN|END)\s+([\w-]+)\s+\*\*\*\/', line)
         if m:
-            if in_ == 'junk'and m[1] == 'BEGIN' and m[2] in tmpl:
-                in_ = m[2]
+            if in_ == 'junk' and m.group(1) == 'BEGIN' and m.group(2) in tmpl:
+                in_ = m.group(2)
                 continue
-        elif in_ == m[2] and m[1] == 'END' and m[2] in tmpl:
-            in_ = 'junk'
-            continue
-        else:
-            sys.exit("Malformed template file " + file);
+            elif in_ == m.group(2) and m.group(1) == 'END' and m.group(2) in tmpl:
+                in_ = 'junk'
+                continue
+            else:
+                sys.exit("Malformed template file " + file);
 
         if in_ != 'junk':
             tmpl[in_] += line
@@ -222,12 +223,11 @@ def read_template_file(file):
     vhead = tmpl['value-header']
     vprod = tmpl['value-production']
     vtail = tmpl['value-tail']
-    lcomment_tmpl = tmpl['comment']
+    comment_tmpl = tmpl['comment']
 
     # default to C-style comments
     if comment_tmpl == "":
         comment_tmpl = "/* @comment@ */"
-
 
 if len(sys.argv) == 1:
     usage()
@@ -241,14 +241,29 @@ parser.add_argument('--eprod', default='', dest='eprod')
 parser.add_argument('--vhead', default='', dest='vhead')
 parser.add_argument('--vprod', default='', dest='vprod')
 parser.add_argument('--vtail', default='', dest='vtail')
-parser.add_argument('--comments', default='', dest='command_tmpl')
+parser.add_argument('--comments', default='', dest='comment_tmpl')
 parser.add_argument('--template', default='', dest='template')
 parser.add_argument('--output', default='', dest='output')
 parser.add_argument('args', nargs='*')
 
 options = parser.parse_args()
 
-if options.output != '':
+if options.template != '':
+    read_template_file(options.template)
+
+idprefix += options.idprefix
+symprefix += options.symprefix
+fhead += options.fhead
+ftail += options.ftail
+eprod += options.eprod
+vhead += options.vhead
+vprod += options.vprod
+vtail += options.vtail
+if options.comment_tmpl != '':
+    comment_tmpl = options.comment_tmpl
+output = options.output
+
+if output != '':
     (out_dir, out_fn) = os.path.split(options.output)
     out_suffix = '_' + os.path.splitext(out_fn)[1]
     if out_dir == '':
@@ -258,8 +273,7 @@ else:
     tmpfile = None
 
 # put auto-generation comment
-comment = options.comment_tmpl
-comment = comment.replace('@comment@', 'Generated data (by glib-mkenums)')
+comment = comment_tmpl.replace('@comment@', 'Generated data (by glib-mkenums)')
 print("\n" + comment + '\n')
 
 def replace_specials(prod):
@@ -272,8 +286,8 @@ def replace_specials(prod):
     prod = prod.strip()
     return prod
 
-if length(options.head) > 0:
-    prod = options.fhead;
+if len(fhead) > 0:
+    prod = fhead;
     base = os.path.basename(options.args[0])
 
     prod = prod.replace('@filename@', options.args[0])
@@ -286,16 +300,16 @@ def process_file(curfilename):
     curfile = open(curfilename)
     for line in curfile:
         # read lines until we have no open comments
-        while re.search(r'/\*([^*]|\*(?!/))*$'):
+        while re.search(r'/\*([^*]|\*(?!/))*$', line):
             line = curfile.readline()
 
         # strip comments w/o options
         line = re.sub(r'''/\*(?!<)
            ([^*]+|\*(?!/))*
-           \*/''', '')
+           \*/''', '', line)
 
         # ignore forward declarations
-        if re.match(r'\s*typedef\s+enum.*;/;'):
+        if re.match(r'\s*typedef\s+enum.*;/;', line):
             continue
 
         m = re.match(r'''\s*typedef\s+enum\s*
@@ -303,10 +317,10 @@ def process_file(curfilename):
                (?:/\*<
                  (([^*]|\*(?!/))*)
                 >\s*\*/)?
-               \s*({)?''')
+               \s*({)?''', line, flags=re.X)
         if m:
-            groups = m.groups
-            if len(groups) >= 2:
+            groups = m.groups()
+            if len(groups) >= 2 and groups[2] is not None:
                 options = parse_trigraph(groups[2]);
                 if 'skip' in options:
                     continue
@@ -345,7 +359,7 @@ def process_file(curfilename):
                 flags = seenbitshift
 
             # Autogenerate a prefix
-            if enum_prefix is not None:
+            if enum_prefix is None:
                 for entry in entries:
                     if len(entry) > 2:
                         nick = entry[2]
@@ -361,7 +375,7 @@ def process_file(curfilename):
                     enum_prefix = ""
                 else:
                     # Trim so that it ends in an underscore
-                    enum_prefix = re.sub(r'_[^_]*$', '_')
+                    enum_prefix = re.sub(r'_[^_]*$', '_', enum_prefix)
             else:
                 # canonicalize user defined prefixes
                 enum_prefix = enum_prefix.upper()
@@ -383,7 +397,7 @@ def process_file(curfilename):
                 enumshort = re.sub(r'^[A-Z][A-Z0-9]*_', '', enumlong)
 
                 enumname_prefix = re.sub('_' + enumshort + '$', '', enumlong)
-            elif not symprefix and not idprefix:
+            elif symprefix == '' and idprefix == '':
                 # enumname is e.g. GMatchType
                 enspace = re.sub(r'^([A-Z][a-z]*).*$', '\1', enumname)
 
@@ -423,9 +437,9 @@ def process_file(curfilename):
 
                 if len(fprod) > 0:
                     prod = fprod;
-                    base = os.path.basename(curfname);
+                    base = os.path.basename(curfilename);
 
-                    prod = prod.replace('@filename@', curfname)
+                    prod = prod.replace('@filename@', curfilename)
                     prod = prod.replace('@basename@', base)
                     prod = replace_specials(prod)
 
@@ -546,9 +560,9 @@ def process_file(curfilename):
 for fname in options.args:
     process_file(fname)
 
-if len(options.ftail) > 0:
-    prod = options.ftail
-    base = basename(options.args[-1]) # FIXME, wrong
+if len(ftail) > 0:
+    prod = ftail
+    base = os.path.basename(options.args[-1]) # FIXME, wrong
 
     prod = prod.replace('@filename@', 'ARGV') # wrong too
     prod = prod.replace('@basename@', base)
@@ -556,7 +570,7 @@ if len(options.ftail) > 0:
     print(prod)
 
 # put auto-generation comment
-comment = options.comment_tmpl;
+comment = comment_tmpl;
 comment = comment.replace('@comment@', 'Generated data ends here')
 print("\n" + comment + "\n")
 
