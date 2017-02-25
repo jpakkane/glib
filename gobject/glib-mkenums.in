@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 
+# If the code below looks horrible and unpythonic, do not panic.
+#
+# It is.
+#
+# This is a manual conversion from the original Perl script to
+# Python. Improvements are welcome.
+
 import os, sys, re, argparse
 
 # glib-mkenums.py
@@ -283,7 +290,7 @@ def replace_specials(prod):
     prod = prod.replace(r'\\n', r'\n')
     prod = prod.replace(r'\\f', r'\f')
     prod = prod.replace(r'\\r', r'\r')
-    prod = prod.strip()
+    prod = prod.rstrip()
     return prod
 
 if len(fhead) > 0:
@@ -343,7 +350,7 @@ def process_file(curfilename):
                     print("$0: $ARGV:$.: lowercase_name is deprecated, use underscore_name")
 
             # Didn't have trailing '{' look on next lines
-            if len(groups) < 1 and len(groups) < 4: # FIXME completely wrong
+            if groups[0] is None and (len(groups) < 5 or groups[4] is None):
                 while True:
                     line = curfile.readline()
                     if re.match(r'\s*\{', line):
@@ -507,17 +514,17 @@ def process_file(curfilename):
                         if num is not None:
                             # use sandboxed evaluation as a reasonable
                             # approximation to C constant folding
-                            inum = eval(num, locals={}, globals={});
+                            inum = eval(num, {}, {});
 
                             # make sure it parsed to an integer
                             if not isinstance(inum, int):
                                 sys.exit("Unable to parse enum value '%s'" % num)
-                                num = inum
+                            num = inum
                         else:
                             num = next_num
 
                         tmp_prod = tmp_prod.replace('@valuenum@', str(num))
-                        next_num = num + 1
+                        next_num = int(num) + 1
 
                     tmp_prod = tmp_prod.replace('@VALUENAME@', name)
                     tmp_prod = tmp_prod.replace('@valuenick@', nick)
@@ -533,7 +540,7 @@ def process_file(curfilename):
                         tmp_prod = tmp_prod.replace('@TYPE@', 'FLAGS')
                     else:
                         tmp_prod = tmp_prod.replace('@TYPE@', 'ENUM')
-                    tmp_prod = tmp_prod.strip()
+                    tmp_prod = tmp_prod.rstrip()
 
                     print(tmp_prod)
 
