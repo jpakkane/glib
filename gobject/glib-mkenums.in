@@ -26,7 +26,7 @@ sandbox = None      # sandbox for safe evaluation of expressions
 output = ''            # Filename to write result into
 
 def parse_trigraph(opts):
-    result = []
+    result = {}
 
     for opt in re.split(r'\s*,\s*', opts):
         opt = re.sub(r'^\s*', '', opt)
@@ -39,11 +39,11 @@ def parse_trigraph(opts):
             val = groups[1]
         else:
             val = 1
-        result.append((key, val))
+        result[key] = val
     return result
 
 def parse_entries(file, file_name):
-    global entries
+    global entries, enumindex
     looking_for_name = False
 
     for line in file:
@@ -91,7 +91,7 @@ def parse_entries(file, file_name):
             looking_for_name = True
             continue
 
-        m = re.match(r'''s*
+        m = re.match(r'''\s*
               (\w+)\s*                   # name
               (?:=(                      # value
                    \s*\w+\s*\(.*\)\s*       # macro with multiple args
@@ -117,8 +117,8 @@ def parse_entries(file, file_name):
 
             if options is not None:
                 options = parse_trigraph(options)
-            if options['skip'] is not None:
-                entries.append((name, value, options['nick']));
+                if options['skip'] is not None:
+                    entries.append((name, value, options['nick']));
             else:
                 entries.append((name, value))
         elif re.match('s*\#', line):
@@ -296,6 +296,7 @@ if len(fhead) > 0:
     print(prod)
 
 def process_file(curfilename):
+    global entries
     firstenum = True
     curfile = open(curfilename)
     for line in curfile:
@@ -382,12 +383,14 @@ def process_file(curfilename):
                 enum_prefix = enum_prefix.replace('-', '_')
                 enum_prefix = re.sub(r'(.*)([^_])$', r'\1\2_')
 
-            fixed_entries = {}
-            for name, num, nick in entries:
-                if nick is not None:
+            fixed_entries = []
+            for e in entries:
+                name = e[0]
+                num = e[1]
+                if len(e) == 2:
                     nick = name = re.sub('/^' + enum_prefix, '', name)
                     nick = nick.replace('_', '-').lower()
-                fixed_entries[entry] = (name, num, nick);
+                fixed_entries.append((name, num, nick))
             entries = fixed_entries
 
             # Spit out the output
