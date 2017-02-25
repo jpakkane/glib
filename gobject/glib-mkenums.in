@@ -2,7 +2,7 @@
 
 import os, sys, re, argparse
 
-# glib-mkenums.py 
+# glib-mkenums.py
 # Information about the current enumeration
 flags = None # Is enumeration a bitmask?
 option_underscore_name = '' # Overriden underscore variant of the enum name
@@ -43,7 +43,7 @@ def parse_trigraph(opts):
     return result
 
 def parse_entries(file, file_name):
-    global entries, enumindex
+    global entries, enumindex, enumname, seenbitshift
     looking_for_name = False
 
     for line in file:
@@ -63,7 +63,7 @@ def parse_entries(file, file_name):
             continue
 
         if looking_for_name:
-            m = re.match('\s*(\w+)')
+            m = re.match('\s*(\w+)', line)
             if m:
                 enumname = m.group(1);
                 return True
@@ -199,7 +199,7 @@ def read_template_file(file):
 
     ifile = open(file)
     for line in ifile:
-        m = re.match('\/\*\*\*\s+(BEGIN|END)\s+([\w-]+)\s+\*\*\*\/', line)
+        m = re.match(r'\/\*\*\*\s+(BEGIN|END)\s+([\w-]+)\s+\*\*\*\/', line)
         if m:
             if in_ == 'junk' and m.group(1) == 'BEGIN' and m.group(2) in tmpl:
                 in_ = m.group(2)
@@ -402,14 +402,14 @@ def process_file(curfilename):
                 enumname_prefix = re.sub('_' + enumshort + '$', '', enumlong)
             elif symprefix == '' and idprefix == '':
                 # enumname is e.g. GMatchType
-                enspace = re.sub(r'^([A-Z][a-z]*).*$', '\1', enumname)
+                enspace = re.sub(r'^([A-Z][a-z]*).*$', r'\1', enumname)
 
                 enumshort = re.sub(r'^[A-Z][a-z]*', '', enumname)
-                enumshort = re.sub(r'([^A-Z])([A-Z])', '\1_\2', enumshort)
-                enumshort = re.sub(r'([A-Z][A-Z])([A-Z][0-9a-z])', '\1_\2', enumshort)
+                enumshort = re.sub(r'([^A-Z])([A-Z])', r'\1_\2', enumshort)
+                enumshort = re.sub(r'([A-Z][A-Z])([A-Z][0-9a-z])', r'\1_\2', enumshort)
                 enumshort = enumshort.upper()
 
-                enumname_prefix = re.sub(r'^([A-Z][a-z]*).*$', '\1', enumname).upper()
+                enumname_prefix = re.sub(r'^([A-Z][a-z]*).*$', r'\1', enumname).upper()
 
                 enumlong = enspace.upper() + "_" + enumshort
                 enumsym = enspace.lower() + "_" + enumshort.lower()
@@ -473,7 +473,6 @@ def process_file(curfilename):
 
             if len(vhead) > 0:
                 prod = vhead;
-
                 prod = prod.replace('@enum_name@', enumsym)
                 prod = prod.replace('@EnumName@', enumname)
                 prod = prod.replace('@ENUMSHORT@', enumshort)
