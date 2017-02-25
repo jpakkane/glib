@@ -21,7 +21,7 @@ option_lowercase_name = ''  # DEPRECATED.  A lower case name to use as part
                             # uses abnormal capitalization and we can not
                             # guess where to put the underscores.
 seenbitshift = 0        # Have we seen bitshift operators?
-enum_prefix = ''        # Prefix for this enumeration
+enum_prefix = None        # Prefix for this enumeration
 enumname = ''            # Name for this enumeration
 enumshort = ''           # $enumname without prefix
 enumname_prefix = ''       # prefix of $enumname
@@ -302,7 +302,7 @@ if len(fhead) > 0:
     print(prod)
 
 def process_file(curfilename):
-    global entries, flags, seenbitshift
+    global entries, flags, seenbitshift, enum_prefix
     firstenum = True
     curfile = open(curfilename)
     for line in curfile:
@@ -368,14 +368,10 @@ def process_file(curfilename):
             # Autogenerate a prefix
             if enum_prefix is None:
                 for entry in entries:
-                    if len(entry) > 2:
-                        nick = entry[2]
+                    if len(entry) < 3 or entry[2] is None:
                         name = entry[0];
                         if enum_prefix is not None:
-                            #tmp = ~ ($name ^ $enum_prefix);
-                            #($tmp) = $tmp =~ /(^\xff*)/;
-                            #$enum_prefix = $enum_prefix & $tmp;
-                            enum_prefix = 'WHAT_IS_THIS_I_DONT_EVEN'
+                            enum_prefix = os.path.commonprefix([name, enum_prefix])
                         else:
                             enum_prefix = name;
                 if enum_prefix is None:
@@ -393,10 +389,11 @@ def process_file(curfilename):
             for e in entries:
                 name = e[0]
                 num = e[1]
-                if len(e) == 2:
-                    nick = name = re.sub('/^' + enum_prefix, '', name)
+                if len(e) < 3 or e[2] is None:
+                    nick = name = re.sub(r'^' + enum_prefix, '', name)
                     nick = nick.replace('_', '-').lower()
-                fixed_entries.append((name, num, nick))
+                    e = (name, num, nick)
+                fixed_entries.append(e)
             entries = fixed_entries
 
             # Spit out the output
