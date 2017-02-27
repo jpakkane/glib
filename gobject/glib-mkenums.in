@@ -9,6 +9,12 @@
 
 import os, sys, re, argparse
 
+output_stream = sys.stdout
+
+def write_output(output):
+    global output_stream
+    print(output, file=output_stream)
+
 version = '@GLIB_VERSION@'
 
 # glib-mkenums.py
@@ -244,7 +250,7 @@ parser.add_argument('--comments', default='', dest='comment_tmpl',
                     help='Comment structure')
 parser.add_argument('--template', default='', dest='template',
                     help='Template file')
-parser.add_argument('--output', default='', dest='output')
+parser.add_argument('--output', default=None, dest='output')
 parser.add_argument('--version', '-v', default=False, action='store_true', dest='version',
                     help='Print version informations')
 parser.add_argument('args', nargs='*')
@@ -269,18 +275,19 @@ if options.comment_tmpl != '':
     comment_tmpl = options.comment_tmpl
 output = options.output
 
-if output != '':
+if output is not None:
     (out_dir, out_fn) = os.path.split(options.output)
     out_suffix = '_' + os.path.splitext(out_fn)[1]
     if out_dir == '':
         out_dir = '.'
     tmpfile = tempfile.NamedTemporaryFile(dir=out_dir, delete=False)
+    output_stream = tmpfile
 else:
     tmpfile = None
 
 # put auto-generation comment
 comment = comment_tmpl.replace('@comment@', 'Generated data (by glib-mkenums)')
-print("\n" + comment + '\n')
+write_output("\n" + comment + '\n')
 
 def replace_specials(prod):
     prod = prod.replace(r'\\a', r'\a')
@@ -299,7 +306,7 @@ if len(fhead) > 0:
     prod = prod.replace('@filename@', options.args[0])
     prod = prod.replace('@basename@', base)
     prod = replace_specials(prod)
-    print(prod)
+    write_output(prod)
 
 def process_file(curfilename):
     global entries, flags, seenbitshift, enum_prefix
@@ -343,10 +350,10 @@ def process_file(curfilename):
 
             if option_lowercase_name is not None:
                 if option_underscore_name is not None:
-                    print("$0: $ARGV:$.: lowercase_name overriden with underscore_name")
+                    print("$0: $ARGV:$.: lowercase_name overriden with underscore_name", file=sys.stderr)
                     option_lowercase_name = None
                 else:
-                    print("$0: $ARGV:$.: lowercase_name is deprecated, use underscore_name")
+                    print("$0: $ARGV:$.: lowercase_name is deprecated, use underscore_name", file=sys.stderr)
 
             # Didn't have trailing '{' look on next lines
             if groups[0] is None and (len(groups) < 5 or groups[4] is None):
@@ -449,7 +456,7 @@ def process_file(curfilename):
                     prod = prod.replace('@basename@', base)
                     prod = replace_specials(prod)
 
-                    print(prod)
+                    write_output(prod)
 
             if len(eprod) > 0:
                 prod = eprod;
@@ -472,7 +479,7 @@ def process_file(curfilename):
                 else:
                     prod = prod.replace('@TYPE@', 'ENUM')
                 prod = replace_specials(prod)
-                print(prod)
+                write_output(prod)
 
             if len(vhead) > 0:
                 prod = vhead;
@@ -494,7 +501,7 @@ def process_file(curfilename):
                 else:
                     prod = prod.replace('@TYPE@', 'ENUM')
                 prod = replace_specials(prod)
-                print(prod)
+                write_output(prod)
 
             if len(vprod) > 0:
                 prod = vprod;
@@ -538,7 +545,7 @@ def process_file(curfilename):
                         tmp_prod = tmp_prod.replace('@TYPE@', 'ENUM')
                     tmp_prod = tmp_prod.rstrip()
 
-                    print(tmp_prod)
+                    write_output(tmp_prod)
 
             if len(vtail) > 0:
                 prod = vtail
@@ -560,7 +567,7 @@ def process_file(curfilename):
                 else:
                     prod = prod.replace('@TYPE@', 'ENUM')
                 prod = replace_specials(prod)
-                print(prod)
+                write_output(prod)
 
 for fname in options.args:
     process_file(fname)
@@ -572,12 +579,12 @@ if len(ftail) > 0:
     prod = prod.replace('@filename@', 'ARGV') # wrong too
     prod = prod.replace('@basename@', base)
     prod = replace_specials(prod)
-    print(prod)
+    write_output(prod)
 
 # put auto-generation comment
 comment = comment_tmpl;
 comment = comment.replace('@comment@', 'Generated data ends here')
-print("\n" + comment + "\n")
+write_output("\n" + comment + "\n")
 
 if tmpfile is not None:
     tmpfilename = tmpfile.name
